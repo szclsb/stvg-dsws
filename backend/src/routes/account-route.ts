@@ -1,10 +1,11 @@
 import {Router} from "express";
 import {ObjectID} from "bson";
 import {Db} from "mongodb";
+import {Config} from "../model/config";
 
 const collectionName = "accounts"
 
-export function init(router: Router, db: Db): Router {
+export function init(config: Config, router: Router, db: Db): Router {
     router.get("/:id", (req, res) => {
         const id = req.params.id as string;
         db.collection(collectionName).findOne({_id: new ObjectID(id)},

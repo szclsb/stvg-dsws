@@ -1,12 +1,13 @@
 import {Router} from "express";
-import {Account} from "../model/account";
 import {Db} from "mongodb";
 import {ObjectID} from "bson";
-import {hashPassword} from "../auth-utils";
+import {Config} from "../model/config";
+import {Account} from "../model/account";
+import {hashPassword, signJwt, verifyPassword} from "../utils/auth-utils";
 
 const collectionName = "accounts"
 
-export function init(router: Router, db: Db): Router {
+export function init(config: Config, router: Router, db: Db): Router {
     router.post("/register", (req, res) => {
         const registration = req.body as Account & {password: string}
         hashPassword(registration.password).then(hash => {
@@ -29,12 +30,36 @@ export function init(router: Router, db: Db): Router {
         });
     });
 
-    // router.post("/login", (req, res) => {
-    //     const cred = req.body as {
-    //         username: string
-    //         password: string
-    //     }
-    // });
-
+    router.post("/login", (req, res) => {
+        const cred = req.body as {
+            username: string
+            password: string
+        }
+        db.collection(collectionName).findOne({username: cred.username}, (err, data) => {
+            if (!err) {
+                verifyPassword(cred.password, data.password).then(result => {
+                    if (result) {
+                        signJwt({
+                            _id: data._id,
+                            username: data.username,
+                            email: data.email,
+                            address: data.address,
+                            emailVerified: data.emailVerified,
+                        }, config.secret)
+                            .then(token => res.status(200).send(token))
+                            .catch(error => {
+                                console.error(error);
+                                res.status(500).send();
+                            })
+                    } else {
+                        res.status(400).send();
+                    }
+                })
+            } else {
+                console.warn(err);
+                res.status(400).send();
+            }
+        });
+    });
     return router;
 }

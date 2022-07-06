@@ -1,13 +1,7 @@
-export interface ConfigUtils {
-    port: number,
-    dbConnection: string,
-    dbUser: string,
-    dbPassword: string,
-    dbName: string,
-}
+import {Config} from "../model/config";
 
-export function loadConfig(json: any): ConfigUtils {
-    if (!json.dbConnection || !json.dbUser || !json.dbPassword || !json.dbName) {
+export function loadConfig(json: any): Config {
+    if (!json.dbConnection || !json.dbUser || !json.dbPassword || !json.dbName || !json.secret) {
         throw Error("invalid configuration: missing database parameters");
     }
     const port = readValue(json.port) ?? "8080";
@@ -17,6 +11,7 @@ export function loadConfig(json: any): ConfigUtils {
         dbUser: readValue(json.dbUser),
         dbPassword: readValue(json.dbPassword),
         dbName: readValue(json.dbName),
+        secret: readValue(json.secret),
     }
 }
 

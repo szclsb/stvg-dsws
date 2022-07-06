@@ -3,5 +3,6 @@
   "dbConnection": "$ENV:DB_CONNECTION",
   "dbUser": "$ENV:DB_USER",
   "dbPassword": "$ENV:DB_PASSWORD",
-  "dbName": "dsws"
+  "dbName": "dsws",
+  "secret": "$ENV:SECRET"
 }

@@ -4,7 +4,7 @@ import * as bodyParser from "body-parser";
 import * as json from '../dsws-config.json';
 import {init as initDb} from "./db";
 import {init as initRoutes} from "./routes";
-import {loadConfig} from "./config-utils";
+import {loadConfig} from "./utils/config-utils";
 
 const app = express();
 const config = loadConfig(json);
@@ -19,7 +19,7 @@ app.use((req, res, next) => {
 });
 
 initDb(config).then(db => {
-    initRoutes(app, db).listen(config.port, () => {
+    initRoutes(config, app, db).listen(config.port, () => {
         console.log( `server started at http://localhost:${ config.port }` );
     } );
 })
