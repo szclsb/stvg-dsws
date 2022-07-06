@@ -1,15 +1,27 @@
 import express from "express";
 
+import * as bodyParser from "body-parser";
+import * as json from '../dsws-config.json';
+import {init as initDb} from "./db";
+import {init as initRoutes} from "./routes";
+import {loadConfig} from "./config-utils";
+
 const app = express();
-const port = 8080; // default port to listen
+const config = loadConfig(json);
 
-// define a route handler for the default home page
-app.get( "/", ( req: any, res: { send: (arg0: string) => void; } ) => {
-    res.send('hello world');
-} );
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    res.header('Access-Control-Allow-Methods', 'PUT, POST, GET, DELETE');
+    next();
+});
 
-// start the Express server
-app.listen( port, () => {
-    // tslint:disable-next-line:no-console
-    console.log( `server started at http://localhost:${ port }` );
-} );
+initDb(config).then(db => {
+    initRoutes(app, db).listen(config.port, () => {
+        console.log( `server started at http://localhost:${ config.port }` );
+    } );
+})
+
+
