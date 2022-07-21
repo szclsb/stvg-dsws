@@ -1,5 +1,6 @@
 import {init as initAuth} from './routes/auth-route'
 import {init as initAccount} from './routes/account-route'
+import {init as initDiscipline} from './routes/discipline-route'
 
 import express, {Application} from "express";
 import {Db} from "mongodb";
@@ -20,5 +21,6 @@ export function init(config: Config, app: Application, db: Db): Application {
     });
     app.use('/api/v1/auth', initAuth(config, express.Router(), db));
     app.use('/api/v1/account', initAccount(config, express.Router(), db));
+    app.use('/api/v1/discipline', initDiscipline(config, express.Router(), db));
     return app
 }

@@ -40,6 +40,6 @@ export function init(config: Config, router: Router, db: Db): Router {
             }
         });
     });
-
+    console.debug(`initialized route account`);
     return router;
 }
