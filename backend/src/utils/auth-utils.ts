@@ -4,6 +4,7 @@ import {Account} from "../model/account";
 import e from "express";
 import {ObjectID} from "bson";
 import {JwtPayload} from "jsonwebtoken";
+import {WithId} from "./main-utils";
 
 const saltRounds = 12;
 const algorithm = 'HS256';
@@ -21,7 +22,8 @@ export async function signJwt(account: Account & {_id: ObjectID, emailVerified: 
     return new Promise((resolve, reject) => {
         jwt.sign({
             username: account.username,
-            email: account.email
+            email: account.email,
+            roles: account.roles
         }, secret, {
             algorithm,
             subject: account._id.toHexString(),
@@ -37,7 +39,7 @@ export async function signJwt(account: Account & {_id: ObjectID, emailVerified: 
     });
 }
 
-export async function verifyJwt(token: string, secret: string): Promise<Account & {_id: ObjectID}> {
+export async function verifyJwt(token: string, secret: string): Promise<WithId<Account>> {
     return new Promise((resolve, reject) => {
         jwt.verify(token, secret, {
             algorithms: [algorithm],
@@ -47,7 +49,8 @@ export async function verifyJwt(token: string, secret: string): Promise<Account 
                 resolve({
                     _id: new ObjectID(decoded.sub as string),
                     username: decoded.username,
-                    email: decoded.email
+                    email: decoded.email,
+                    roles: decoded.roles
                 });
             } else {
                 reject(err);

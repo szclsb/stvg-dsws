@@ -45,6 +45,7 @@ export function init(config: Config, router: Router, db: Db): Router {
                             email: data.email,
                             address: data.address,
                             emailVerified: data.emailVerified,
+                            roles: data.roles
                         }, config.secret)
                             .then(token => res.status(200).send(token))
                             .catch(error => {

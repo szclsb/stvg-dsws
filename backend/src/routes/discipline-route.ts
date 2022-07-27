@@ -2,11 +2,13 @@ import {Config} from "../model/config";
 import {Router} from "express";
 import {Db} from "mongodb";
 import {Discipline, mapper} from "../model/discipline";
-import {deleteRoute, insertRoute, readAllRoute, readRoute, updateRoute} from "../utils/route-utils";
+import {requireRoles, deleteRoute, insertRoute, readAllRoute, readRoute, updateRoute} from "../utils/route-utils";
+import {ADMIN} from "../roles";
 
 const collectionName = "disciplines";
 
 export function init(config: Config, router: Router, db: Db): Router {
+    router.use(requireRoles([ADMIN]));
     insertRoute<Discipline>(router, db.collection(collectionName), mapper, 'api/v1/discipline',
         (discipline) => `created discipline ${discipline.name} with id ${discipline._id}`);
     readAllRoute<Discipline>(router, db.collection(collectionName));
