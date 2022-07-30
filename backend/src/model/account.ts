@@ -1,3 +1,5 @@
+import {ObjectID} from "bson";
+
 export interface Account {
     username: string;
     email: string;
@@ -11,3 +13,4 @@ export interface Address {
     city: string;
 }
 
+export type WithAccount<T> = T & {account: Account | ObjectID};
