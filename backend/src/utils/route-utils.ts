@@ -1,16 +1,12 @@
 import {RequestHandler, Response, Router} from "express";
 import {ObjectID} from "bson";
-import {WithId as WithObjectId, Collection, Document} from "mongodb";
-import {EntityMapper, WithId} from "./main-utils";
 import {Account, WithAccount} from "../model/account";
-import {mapper, Person} from "../model/person";
 import {ADMIN} from "../roles";
+import {EntityManager, EntityMapper, Selector, WithID} from "../persistance/entity-manager";
 
-export type InsertSuccess<T> = (entity: WithId<T>) => string;
+export type InsertSuccess<T> = (entity: T, id: string) => string;
 export type UpdateSuccess<T> = (id: string, old: T, altered: T) => string;
 export type DeleteSuccess = (id: string) => string;
-export type DbCallback = (res: any, err: any) => any;
-export type DbMapper<T> = (doc?: WithObjectId<Document>) => WithId<WithAccount<T>>
 
 export function requireLoggedIn(): RequestHandler {
     return (req, res, next) => {
@@ -24,7 +20,7 @@ export function requireLoggedIn(): RequestHandler {
 
 export function requireRoles(roles: string[]): RequestHandler {
     return (req, res, next) => {
-        const account = res.locals.account as WithId<Account>;
+        const account = res.locals.account as WithID<Account, ObjectID>;
         if (!account) {
             res.status(401).send();
         } else if (account.roles !== undefined && roles.some(role => account.roles.includes(role))) {
@@ -36,7 +32,7 @@ export function requireRoles(roles: string[]): RequestHandler {
 }
 
 export function guardRoles(res: Response, roles: string[], allowedId: ObjectID | undefined, callback: () => any): any {
-    const account = res.locals.account as WithId<Account>;
+    const account = res.locals.account as WithID<Account, ObjectID>;
     if (!account) {
         res.status(401).send();
     } else if ((account.roles !== undefined && roles.some(role => account.roles.includes(role))) || (allowedId !== undefined && allowedId === account._id)) {
@@ -46,120 +42,128 @@ export function guardRoles(res: Response, roles: string[], allowedId: ObjectID |
     }
 }
 
-export function insertRoute<T>(router: Router, collection: Collection, map: EntityMapper<T>, baseUrl: string, successMessage: InsertSuccess<T>): any {
+export function insertRoute<T>(router: Router, em: EntityManager<T, ObjectID>, map: EntityMapper<T>, baseUrl: string, successMessage: InsertSuccess<T>): any {
     router.post("/", (req, res) => {
-        const entity = map(req.body) as WithId<T>;
-        collection.insertOne(entity, insertCallback(res, `${baseUrl}/${entity._id}`, successMessage(entity)));
+        const entity = map(req.body) as WithID<T, ObjectID>;
+        em.insertOne(entity).then((insertedId) => {
+            console.log(successMessage(entity, insertedId.toHexString()));
+            res.setHeader('Location', `${baseUrl}/${insertedId}`).status(201).send();
+        }).catch((err) => {
+            console.warn(err);
+            res.status(500).send();
+        });
     });
 }
 
-export function readAllRoute<T>(router: Router, collection: Collection): any {
+export function readAllRoute<T, R = T>(router: Router, em: EntityManager<T, ObjectID>, filter?: Selector, projection?: Selector): any {
     router.get("/", (req, res) => {
-        collection.aggregate().toArray(readCallback(res));
+        em.findMany<R>(filter, projection).then((entities) => {
+            res.status(200).json(entities).send();
+        }).catch((err) => {
+            console.warn(err);
+            res.status(500).send();
+        });
     });
 }
 
-export function readRoute<T>(router: Router, collection: Collection): any {
+export function readRoute<T, R = T>(router: Router, em: EntityManager<T, ObjectID>, projection?: Selector): any {
     router.get("/:id", (req, res) => {
         const id = req.params.id as string;
-        collection.findOne({_id: new ObjectID(id)}, readCallback(res));
+        em.findOne<R>({_id: new ObjectID(id)}, projection).then((entity) => {
+            res.status(200).json(entity).send();
+        }).catch((err) => {
+            console.warn(err);
+            res.status(500).send();
+        });
     });
 }
 
-export function updateRoute<T>(router: Router, collection: Collection, map: EntityMapper<T>, successMessage: UpdateSuccess<T>): any {
+export function updateRoute<T>(router: Router, em: EntityManager<T, ObjectID>, map: EntityMapper<T>, successMessage: UpdateSuccess<T>): any {
     router.put("/:id", (req, res) => {
         const id = req.params.id as string;
         const entity = map(req.body)
         const entityCopy = Object.assign({}, entity);
-        collection.updateOne({_id: new ObjectID(id)}, {$set: entity},
-            alterCallback(res, successMessage(id, entityCopy, entity)));
+        em.updateOne({_id: new ObjectID(id)}, entity).then(() => {
+            console.log(successMessage(id, entityCopy, entity));
+            res.status(204).send();
+        }).catch((err) => {
+            console.warn(err);
+            res.status(500).send();
+        });
     });
 }
 
-export function deleteRoute(router: Router, collection: Collection, successMessage: DeleteSuccess): any {
+export function deleteRoute<T>(router: Router, em: EntityManager<T, ObjectID>, successMessage: DeleteSuccess): any {
     router.delete("/:id", (req, res) => {
         const id = req.params.id as string;
-        collection.deleteOne({_id: new ObjectID(id)},
-            alterCallback(res, successMessage(id)));
+        em.deleteOne({_id: new ObjectID(id)}).then(() => {
+            console.log(successMessage(id));
+            res.status(204).send();
+        }).catch((err) => {
+            console.warn(err);
+            res.status(500).send();
+        });
     });
 }
 
-export function insertGuardedRoute<T>(router: Router, collection: Collection, entityMapper: EntityMapper<T>, baseUrl: string, successMessage: InsertSuccess<T>) {
+export function insertGuardedRoute<T>(router: Router, em: EntityManager<WithAccount<T>, ObjectID>, entityMapper: EntityMapper<T>, baseUrl: string, successMessage: InsertSuccess<T>) {
     router.post("/", (req, res) => {
-        const account = res.locals.account as WithId<Account>;
-        const entity: WithId<WithAccount<T>> = Object.assign({
+        const account = res.locals.account as WithID<T, ObjectID>;
+        const entity: WithAccount<T> = Object.assign({
             account: account._id
         }, entityMapper(req.body));
-        collection.insertOne(entity, insertCallback(res, `${baseUrl}/${entity._id}`, successMessage(entity)));
-    });
-}
-
-export function updateGuardedRoute<T>(router: Router, collection: Collection, entityMapper: EntityMapper<T>, dbMapper: DbMapper<T>, successMessage: UpdateSuccess<T>) {
-    router.put("/:id", (req, res) => {
-        const id = req.params.id as string;
-        const filter = {_id: new ObjectID(id)};
-        const newEntity = entityMapper(req.body)
-        collection.findOne(filter, (error, result) => {
-            if (!error) {
-                const oldEntity = dbMapper(result);
-                guardRoles(res, [ADMIN], oldEntity.account as ObjectID, () => {
-                    collection.updateOne(filter, {$set: newEntity}, alterCallback(res, successMessage(id, oldEntity, newEntity)));
-                });
-            } else {
-                res.status(500).send(error);
-            }
+        em.insertOne(entity).then((insertedId) => {
+            console.log(successMessage(entity, insertedId.toHexString()));
+            res.setHeader('Location', `${baseUrl}/${insertedId}`).status(201).send();
+        }).catch((err) => {
+            console.warn(err);
+            res.status(500).send();
         });
     });
 }
 
-export function deleteGuardedRoute<T>(router: Router, collection: Collection, dbMapper: DbMapper<T>, successMessage: DeleteSuccess) {
+export function updateGuardedRoute<T>(router: Router, roles: string[], em: EntityManager<WithAccount<T>, ObjectID>, entityMapper: EntityMapper<T>, successMessage: UpdateSuccess<T>) {
     router.put("/:id", (req, res) => {
+        const account = res.locals.account as WithID<Account, ObjectID>;
         const id = req.params.id as string;
         const filter = {_id: new ObjectID(id)};
-        collection.findOne(filter, (error, result) => {
-            if (!error) {
-                const oldEntity = dbMapper(result);
-                guardRoles(res, [ADMIN], oldEntity.account as ObjectID, () => {
-                    collection.deleteOne(filter, alterCallback(res, successMessage(id)));
+        const newEntity: T = entityMapper(req.body);
+        em.findOne(filter).then((oldEntity) => {
+            guardRoles(res, roles, oldEntity.account as ObjectID, () => {
+                em.updateOne(filter, Object.assign({
+                    account: account._id
+                }, newEntity)).then(() => {
+                    console.log(successMessage(id, oldEntity, newEntity));
+                    res.status(204).send();
+                }).catch((err) => {
+                    console.warn(err);
+                    res.status(500).send(err);
                 });
-            } else {
-                res.status(500).send(error);
-            }
+            });
+        }).catch((err) => {
+            console.warn(err);
+            res.status(500).send(err);
         });
     });
 }
 
-export function insertCallback(res: Response, location: string, successMessage: string): DbCallback {
-    return (err: any, data: any) => {
-        if (!err) {
-            console.log(successMessage);
-            res.setHeader('Location', location).status(201).send();
-        } else {
+export function deleteGuardedRoute<T>(router: Router, roles: string[], em: EntityManager<WithAccount<T>, ObjectID>, successMessage: DeleteSuccess) {
+    router.put("/:id", (req, res) => {
+        const id = req.params.id as string;
+        const filter = {_id: new ObjectID(id)};
+        em.findOne(filter).then((oldEntity) => {
+            guardRoles(res, [ADMIN], oldEntity.account as ObjectID, () => {
+                em.deleteOne(filter).then(() => {
+                    console.log(successMessage(id));
+                    res.status(204).send();
+                }).catch((err) => {
+                    console.warn(err);
+                    res.status(500).send(err);
+                });
+            });
+        }).catch((err) => {
             console.warn(err);
-            res.status(500).send();
-        }
-    }
-}
-
-export function readCallback(res: Response): DbCallback {
-    return (err: any, data: any) => {
-        if (!err) {
-            res.status(200).json(data).send();
-        } else {
-            console.warn(err);
-            res.status(500).send();
-        }
-    };
-}
-
-export function alterCallback(res: Response, successMessage: string): DbCallback {
-    return (err: any, data: any) => {
-        if (!err) {
-            console.log(successMessage);
-            res.status(204).send();
-        } else {
-            console.warn(err);
-            res.status(500).send();
-        }
-    };
+            res.status(500).send(err);
+        });
+    });
 }

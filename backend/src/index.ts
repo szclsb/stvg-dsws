@@ -2,9 +2,11 @@ import express from "express";
 
 import * as bodyParser from "body-parser";
 import * as json from '../dsws-config.json';
-import {init as initDb} from "./db";
 import {init as initRoutes} from "./routes";
 import {loadConfig} from "./utils/config-utils";
+import {MongoDatasource} from "./persistance/mongodb/mongo-datasource";
+import {ObjectID} from "bson";
+import {Datasource} from "./persistance/datasource";
 
 const app = express();
 const config = loadConfig(json);
@@ -18,10 +20,21 @@ app.use((req, res, next) => {
     next();
 });
 
-initDb(config).then(db => {
-    initRoutes(config, app, db).listen(config.port, () => {
+const datasource: Datasource<ObjectID> = new MongoDatasource();
+datasource.connect(config).then(() => {
+    console.log(`connected to database`);
+    const server = initRoutes(config, app, datasource).listen(config.port, () => {
         console.log( `server started at http://localhost:${ config.port }` );
-    } );
-})
+    });
+    process.on('exit', () => {
+        console.log(`terminating`)
+        server.close(() => {
+            console.log(`server closed`)
+        });
+        datasource.close().then(() => {
+            console.log(`db connection closed`)
+        });
+    });
+});
 
 

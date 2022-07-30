@@ -1,10 +1,9 @@
 import * as bcrypt from 'bcrypt';
 import * as jwt from 'jsonwebtoken'
 import {Account} from "../model/account";
-import e from "express";
 import {ObjectID} from "bson";
 import {JwtPayload} from "jsonwebtoken";
-import {WithId} from "./main-utils";
+import {WithID} from "../persistance/entity-manager";
 
 const saltRounds = 12;
 const algorithm = 'HS256';
@@ -39,7 +38,7 @@ export async function signJwt(account: Account & {_id: ObjectID, emailVerified: 
     });
 }
 
-export async function verifyJwt(token: string, secret: string): Promise<WithId<Account>> {
+export async function verifyJwt(token: string, secret: string): Promise<WithID<Account, ObjectID>> {
     return new Promise((resolve, reject) => {
         jwt.verify(token, secret, {
             algorithms: [algorithm],

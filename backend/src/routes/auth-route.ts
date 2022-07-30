@@ -1,31 +1,29 @@
 import {Router} from "express";
-import {Db} from "mongodb";
 import {ObjectID} from "bson";
 import {Config} from "../model/config";
 import {Account} from "../model/account";
 import {hashPassword, signJwt, verifyPassword} from "../utils/auth-utils";
+import {EntityManager} from "../persistance/entity-manager";
 
-const collectionName = "accounts"
+type InternalAccount = Account & {password: string, emailVerified: boolean};
 
-export function init(config: Config, router: Router, db: Db): Router {
+export function init(config: Config, router: Router, em: EntityManager<Account, ObjectID>): Router {
     router.post("/register", (req, res) => {
         const registration = req.body as Account & {password: string}
         hashPassword(registration.password).then(hash => {
-            const account: Account & {_id?: ObjectID, password: string, emailVerified: boolean} = {
+            const account: InternalAccount = {
                 username: registration.username,
                 password: hash,
                 email: registration.email,
                 address: registration.address,
                 emailVerified: false,
             }
-            db.collection(collectionName).insertOne(account, (err, data) => {
-                if (!err) {
-                    console.log(`registered account ${account.username} with id ${account._id}`);
-                    res.setHeader('Location', `api/v1/account/${account._id}`).status(201).send()
-                } else {
-                    console.warn(err);
-                    res.status(500).send();
-                }
+            em.insertOne(account).then((insertedId) => {
+                console.log(`registered account ${account.username} with id ${insertedId.toHexString()}`);
+                res.setHeader('Location', `api/v1/account/${insertedId.toHexString()}`).status(201).send();
+            }).catch(err => {
+                console.warn(err);
+                res.status(500).send();
             });
         });
     });
@@ -35,31 +33,29 @@ export function init(config: Config, router: Router, db: Db): Router {
             username: string
             password: string
         }
-        db.collection(collectionName).findOne({username: cred.username}, (err, data) => {
-            if (!err) {
-                verifyPassword(cred.password, data.password).then(result => {
-                    if (result) {
-                        signJwt({
-                            _id: data._id,
-                            username: data.username,
-                            email: data.email,
-                            address: data.address,
-                            emailVerified: data.emailVerified,
-                            roles: data.roles
-                        }, config.secret)
-                            .then(token => res.status(200).send(token))
-                            .catch(error => {
-                                console.error(error);
-                                res.status(500).send();
-                            })
-                    } else {
-                        res.status(400).send();
-                    }
-                })
-            } else {
-                console.warn(err);
-                res.status(400).send();
-            }
+        em.findOne<InternalAccount>({username: cred.username}).then((entity) =>  {
+            verifyPassword(cred.password, entity.password).then(result => {
+                if (result) {
+                    signJwt({
+                        _id: entity._id,
+                        username: entity.username,
+                        email: entity.email,
+                        address: entity.address,
+                        emailVerified: entity.emailVerified,
+                        roles: entity.roles
+                    }, config.secret)
+                        .then(token => res.status(200).send(token))
+                        .catch(error => {
+                            console.error(error);
+                            res.status(500).send();
+                        })
+                } else {
+                    res.status(400).send();
+                }
+            })
+        }).catch((err) => {
+            console.warn(err);
+            res.status(400).send();
         });
     });
     console.debug(`initialized route auth`);
