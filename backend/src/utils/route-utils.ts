@@ -1,7 +1,6 @@
-import {RequestHandler, Response, Router} from "express";
+import {RequestHandler, Request, Response, Router} from "express";
 import {ObjectID} from "bson";
 import {Account, WithAccount} from "../model/account";
-import {ADMIN} from "../roles";
 import {EntityManager, EntityMapper, Selector, WithID} from "../persistance/entity-manager";
 
 export type InsertSuccess<T> = (entity: T, id: string) => string;
@@ -31,14 +30,17 @@ export function requireRoles(roles: string[]): RequestHandler {
     }
 }
 
-export function guardRoles(res: Response, roles: string[], allowedId: ObjectID | undefined, callback: () => any): any {
-    const account = res.locals.account as WithID<Account, ObjectID>;
-    if (!account) {
-        res.status(401).send();
-    } else if ((account.roles !== undefined && roles.some(role => account.roles.includes(role))) || (allowedId !== undefined && allowedId === account._id)) {
-        callback();
-    } else {
-        res.status(403).send();
+export function requireRolesOrId(roles: string[], extractor: (req: Request) => Promise<string | undefined>): RequestHandler {
+    return async (req, res, next) => {
+        const allowedId = await extractor(req);
+        const account = res.locals.account as WithID<Account, ObjectID>;
+        if (!account) {
+            res.status(401).send();
+        } else if ((account.roles !== undefined && roles.some(role => account.roles.includes(role))) || (allowedId !== undefined && allowedId === account._id.toHexString())) {
+            next();
+        } else {
+            res.status(403).send();
+        }
     }
 }
 
@@ -106,12 +108,25 @@ export function deleteRoute<T>(router: Router, em: EntityManager<T, ObjectID>, s
     });
 }
 
+export function extractAccountId<T>(em: EntityManager<WithAccount<T>, ObjectID>): (req: Request) => Promise<string | undefined> {
+    return async (req) => {
+        const id = req.params.id as string;
+        const oldEntity = await em.findOne({_id: new ObjectID(id)});
+        const accountId = oldEntity?.account as ObjectID;
+        return accountId?.toHexString();
+    }
+}
+
+export function attachAccountId<T>(res: Response, entity: T): WithAccount<T> {
+    const account = res.locals.account as WithID<Account, ObjectID>;
+    return Object.assign({
+        account: account._id
+    }, entity);
+}
+
 export function insertGuardedRoute<T>(router: Router, em: EntityManager<WithAccount<T>, ObjectID>, entityMapper: EntityMapper<T>, baseUrl: string, successMessage: InsertSuccess<T>) {
-    router.post("/", (req, res) => {
-        const account = res.locals.account as WithID<T, ObjectID>;
-        const entity: WithAccount<T> = Object.assign({
-            account: account._id
-        }, entityMapper(req.body));
+    router.post("/", requireLoggedIn(), (req, res) => {
+        const entity = attachAccountId<T>(res, entityMapper(req.body));
         em.insertOne(entity).then((insertedId) => {
             console.log(successMessage(entity, insertedId.toHexString()));
             res.setHeader('Location', `${baseUrl}/${insertedId}`).status(201).send();
@@ -122,24 +137,13 @@ export function insertGuardedRoute<T>(router: Router, em: EntityManager<WithAcco
     });
 }
 
-export function updateGuardedRoute<T>(router: Router, roles: string[], em: EntityManager<WithAccount<T>, ObjectID>, entityMapper: EntityMapper<T>, successMessage: UpdateSuccess<T>) {
-    router.put("/:id", (req, res) => {
-        const account = res.locals.account as WithID<Account, ObjectID>;
+export function updateGuardedRoute<T>(router: Router, roles: string[], em: EntityManager<WithAccount<T>, ObjectID>, entityMapper: EntityMapper<T>, successMessage: UpdateSuccess<T>): any {
+    router.put("/:id", requireRolesOrId(roles, extractAccountId(em)), (req, res) => {
         const id = req.params.id as string;
-        const filter = {_id: new ObjectID(id)};
-        const newEntity: T = entityMapper(req.body);
-        em.findOne(filter).then((oldEntity) => {
-            guardRoles(res, roles, oldEntity.account as ObjectID, () => {
-                em.updateOne(filter, Object.assign({
-                    account: account._id
-                }, newEntity)).then(() => {
-                    console.log(successMessage(id, oldEntity, newEntity));
-                    res.status(204).send();
-                }).catch((err) => {
-                    console.warn(err);
-                    res.status(500).send(err);
-                });
-            });
+        const newEntity = attachAccountId(res, entityMapper(req.body));
+        em.updateOne({_id: new ObjectID(id)}, newEntity).then(() => {
+            console.log(successMessage(id, undefined, newEntity));
+            res.status(204).send();
         }).catch((err) => {
             console.warn(err);
             res.status(500).send(err);
@@ -148,19 +152,11 @@ export function updateGuardedRoute<T>(router: Router, roles: string[], em: Entit
 }
 
 export function deleteGuardedRoute<T>(router: Router, roles: string[], em: EntityManager<WithAccount<T>, ObjectID>, successMessage: DeleteSuccess) {
-    router.put("/:id", (req, res) => {
+    router.put("/:id", requireRolesOrId(roles, extractAccountId(em)), (req, res) => {
         const id = req.params.id as string;
-        const filter = {_id: new ObjectID(id)};
-        em.findOne(filter).then((oldEntity) => {
-            guardRoles(res, [ADMIN], oldEntity.account as ObjectID, () => {
-                em.deleteOne(filter).then(() => {
-                    console.log(successMessage(id));
-                    res.status(204).send();
-                }).catch((err) => {
-                    console.warn(err);
-                    res.status(500).send(err);
-                });
-            });
+        em.deleteOne({_id: new ObjectID(id)}).then(() => {
+            console.log(successMessage(id));
+            res.status(204).send();
         }).catch((err) => {
             console.warn(err);
             res.status(500).send(err);

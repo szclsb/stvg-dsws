@@ -8,7 +8,7 @@ export interface Selector {
 export interface EntityManager<T, ID> {
     insertOne(entity: T): Promise<ID>;
     insertMany(entity: T[]): Promise<ID[]>;
-    findOne<R = T>(filter: Selector, projection?: Selector): Promise<WithID<R, ID>>;
+    findOne<R = T>(filter: Selector, projection?: Selector): Promise<WithID<R, ID> | null>;
     findMany<R = T> (filter?: Selector, projection?: Selector): Promise<WithID<R, ID>[]>
     updateOne(filter: Selector, entity: T): Promise<any>;
     updateMany(filter: Selector, entity: T): Promise<any>;

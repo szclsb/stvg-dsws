@@ -44,7 +44,9 @@ export function init(config: Config, router: Router, em: EntityManager<Account, 
                         emailVerified: entity.emailVerified,
                         roles: entity.roles
                     }, config.secret)
-                        .then(token => res.status(200).send(token))
+                        .then(token => res.status(200).json({
+                            access_token: token
+                        }))
                         .catch(error => {
                             console.error(error);
                             res.status(500).send();
