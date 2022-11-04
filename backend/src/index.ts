@@ -4,7 +4,7 @@ import * as bodyParser from "body-parser";
 import * as json from '../dsws-config.json';
 import {init as initRoutes} from "./routes";
 import {loadConfig} from "./utils/config-utils";
-import {MongoDatasource} from "./persistance/mongodb/mongo-datasource";
+import {MongoDatasource} from "./persistance/impl/mongodb/mongo-datasource";
 import {ObjectID} from "bson";
 import {Datasource} from "./persistance/datasource";
 
@@ -20,7 +20,7 @@ app.use((req, res, next) => {
     next();
 });
 
-const datasource: Datasource<ObjectID> = new MongoDatasource();
+const datasource: Datasource = new MongoDatasource();
 datasource.connect(config).then(() => {
     console.log(`connected to database`);
     const server = initRoutes(config, app, datasource).listen(config.port, () => {

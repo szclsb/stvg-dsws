@@ -6,25 +6,23 @@ import {init as initRegistration} from './routes/registration-route'
 
 import express, {Application} from "express";
 import {Config} from "./model/config";
-import {verifyJwt} from "./utils/auth-utils";
 import {Datasource} from "./persistance/datasource";
-import {ObjectID} from "bson";
-import {Account, WithAccount} from "./model/account";
-import {Discipline} from "./model/discipline";
-import {Person} from "./model/person";
-import {Registration} from "./model/registraion";
+import {AccountDao} from "./persistance/dao/account-dao";
+import {DisciplineDao} from "./persistance/dao/discipline-dao";
+import {PersonDao} from "./persistance/dao/person-dao";
+import {RegistrationDao} from "./persistance/dao/registration-dao";
 
-export function init(config: Config, app: Application, datasource: Datasource<ObjectID>): Application {
-    const accountManager = datasource.createEntityManager<Account>('account');
-    const disciplineManager = datasource.createEntityManager<Discipline>('discipline');
-    const personManager = datasource.createEntityManager<WithAccount<Person>>('person');
-    const registrationManager = datasource.createEntityManager<WithAccount<Registration>>('registration');
+export function init(config: Config, app: Application, datasource: Datasource): Application {
+    const accountManager: AccountDao = datasource.createAccountDao();
+    const disciplineManager: DisciplineDao = datasource.createDisciplineDao();
+    const personManager: PersonDao = datasource.createPersonDao();
+    const registrationManager: RegistrationDao = datasource.createRegistrationDao();
 
     app.use(async (req, res, next) => {
         const auth = req.header('Authorization');
         if (auth && auth.startsWith('Bearer ')) {
             try {
-                res.locals.account = await verifyJwt(auth.substring(7), config.secret);
+                res.locals.account =
             } catch (e) {
                 console.warn(e)
             }

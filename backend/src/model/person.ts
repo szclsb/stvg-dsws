@@ -1,5 +1,4 @@
 import {Sex} from "./sex";
-import {Account} from "./account";
 
 export interface Person {
     firstName: string;

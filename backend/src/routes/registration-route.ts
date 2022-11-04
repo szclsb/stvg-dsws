@@ -9,11 +9,11 @@ import {
 } from "../utils/route-utils";
 import {Registration, mapper} from "../model/registraion";
 import {ObjectID} from "bson";
-import {EntityManager, Selector} from "../persistance/entity-manager";
-import {WithAccount} from "../model/account";
+import {Dao, Selector} from "../persistance/dao/dao";
+import {WithAccount} from "../account/model/account";
 import {ADMIN} from "../roles";
 
-export function init(config: Config, router: Router, em: EntityManager<WithAccount<Registration>, ObjectID>): Router {
+export function init(config: Config, router: Router, em: Dao<WithAccount<Registration>, ObjectID>): Router {
     router.use(requireLoggedIn());
 
     // TODO check category

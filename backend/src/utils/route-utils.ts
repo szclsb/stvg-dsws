@@ -1,165 +1,201 @@
-import {RequestHandler, Request, Response, Router} from "express";
-import {ObjectID} from "bson";
-import {Account, WithAccount} from "../model/account";
-import {EntityManager, EntityMapper, Selector, WithID} from "../persistance/entity-manager";
+import {Request, Response, Router} from "express";
+import {Account} from "../model/account";
+import {Dao, ReadDao, WithID} from "../persistance/dao/dao";
 
+export type BodyMapper<T> = (body: any) => T;
+export type PrepareRequest<F> = (req: Request) => Promise<F>;
+export type AuthorizeAccount<F> = (account?: WithID<Account>, f?: F) => Promise<'Unauthenticated' | 'Unauthorized' | 'Authorized'>;
+export type AuthorizedCallback<F> = (res: Response, f: F, account?: WithID<Account>) => any;
 export type InsertSuccess<T> = (entity: T, id: string) => string;
 export type UpdateSuccess<T> = (id: string, old: T, altered: T) => string;
 export type DeleteSuccess = (id: string) => string;
 
-export function requireLoggedIn(): RequestHandler {
-    return (req, res, next) => {
-        if (!res.locals.account) {
-            res.status(401).send();
-        } else {
-            next();
-        }
+export function buildRequireNothing(): AuthorizeAccount<any> {
+    return _ => new Promise<any>((resolve, reject) => {
+        resolve(null);
+    });
+}
+
+export function buildRequireLoggedIn(): AuthorizeAccount<any> {
+    return (account, _) => new Promise<any>((resolve, reject) => {
+        resolve(!account ? "Unauthenticated" : null)
+    });
+}
+
+export function buildRequireRole(roles: string[]): AuthorizeAccount<any> {
+    return (account, _) => new Promise<any>((resolve, reject) => {
+        resolve(!account ? "Unauthenticated" : roles.some(role => account.roles.includes(role)) ? null : "Unauthorized")
+    });
+}
+
+export function buildRequireRoleOrId<F>(roles: string[], idExtr: (f: F) => Promise<string>): AuthorizeAccount<F> {
+    return async (account, f) => {
+        const id = await idExtr(f);
+        return !account ? "Unauthenticated" : account.id === id || roles.some(role => account.roles.includes(role)) ? "Authorized" : "Unauthorized";
     }
 }
 
-export function requireRoles(roles: string[]): RequestHandler {
-    return (req, res, next) => {
-        const account = res.locals.account as WithID<Account, ObjectID>;
-        if (!account) {
-            res.status(401).send();
-        } else if (account.roles !== undefined && roles.some(role => account.roles.includes(role))) {
-            next();
-        } else {
-            res.status(403).send();
-        }
-    }
+export function accessFilter<F>(req: Request, res: Response, prepareRequest: PrepareRequest<F>, authorize: AuthorizeAccount<F>, onAuthorized: AuthorizedCallback<F>): any {
+    const loggedIn: WithID<Account> | undefined = res.locals.account;
+    prepareRequest(req).then(f => {
+        authorize(loggedIn, f).then(result => {
+            switch (result) {
+                case "Unauthenticated":
+                    res.status(401).send();
+                    break;
+                case "Unauthorized":
+                    res.status(403).send();
+                    break;
+                case "Authorized":
+                    onAuthorized(res, f, loggedIn);
+                    break;
+            }
+        });
+    });
+
 }
 
-export function requireRolesOrId(roles: string[], extractor: (req: Request) => Promise<string | undefined>): RequestHandler {
-    return async (req, res, next) => {
-        const allowedId = await extractor(req);
-        const account = res.locals.account as WithID<Account, ObjectID>;
-        if (!account) {
-            res.status(401).send();
-        } else if ((account.roles !== undefined && roles.some(role => account.roles.includes(role))) || (allowedId !== undefined && allowedId === account._id.toHexString())) {
-            next();
-        } else {
-            res.status(403).send();
-        }
-    }
-}
-
-export function insertRoute<T>(router: Router, em: EntityManager<T, ObjectID>, map: EntityMapper<T>, baseUrl: string, successMessage: InsertSuccess<T>): any {
+export function insertRoute<F>(router: Router, prepareRequest: PrepareRequest<F>, authorize: AuthorizeAccount<F>, authCallback: AuthorizedCallback<F>): any {
     router.post("/", (req, res) => {
-        const entity = map(req.body) as WithID<T, ObjectID>;
-        em.insertOne(entity).then((insertedId) => {
-            console.log(successMessage(entity, insertedId.toHexString()));
+        accessFilter(req, res, prepareRequest , authorize, authCallback);
+    });
+}
+
+export function readAllRoute<F>(router: Router, prepareRequest: PrepareRequest<F>, authorize: AuthorizeAccount<F>, authCallback: AuthorizedCallback<F>): any {
+    router.get("/", (req, res) => {
+        accessFilter(req, res, prepareRequest, authorize, authCallback);
+    });
+}
+
+export function readRoute<F>(router: Router, prepareRequest: PrepareRequest<F>, authorize: AuthorizeAccount<F>, authCallback: AuthorizedCallback<F>): any {
+    router.get("/:id", (req, res) => {
+        accessFilter(req, res, prepareRequest, authorize, authCallback);
+    });
+}
+
+export function updateRoute<F>(router: Router, prepareRequest: PrepareRequest<F>, authorize: AuthorizeAccount<F>, authCallback: AuthorizedCallback<F>): any {
+    router.put("/:id", (req, res) => {
+        accessFilter(req, res, prepareRequest, authorize, authCallback)
+    });
+}
+
+export function deleteRoute<F>(router: Router, prepareRequest: PrepareRequest<F> | undefined, authorize: AuthorizeAccount<F>, authCallback: AuthorizedCallback<F>): any {
+    router.delete("/:id", (req, res) => {
+        accessFilter(req, res, prepareRequest, authorize, authCallback);
+    });
+}
+
+export function buildPrepareNothing(): (req: Request) => Promise<void> {
+    return (req) => Promise.resolve();
+}
+
+export function buildPrepareReqPathId(): (req: Request) => Promise<string> {
+    return (req) => Promise.resolve(req.params.id);
+}
+
+export function buildPrepareReqBody<T>(mapper: BodyMapper<T>): (req: Request) => Promise<T> {
+    return (req) => Promise.resolve(mapper(req.body));
+}
+
+export function buildPrepareEntity<T>(dao: Dao<T>): (req: Request) => Promise<WithID<T>> {
+    return async (req) => {
+        const id = req.params.id as string;
+        return await dao.find(id);
+    }
+}
+
+export function buildPrepareEntityWithBody<T>(mapper: BodyMapper<T>, dao: ReadDao<T>): (req: Request) => Promise<[WithID<T>, T]> {
+    return async (req) => {
+        const id = req.params.id as string;
+        const body = mapper(req.body);
+        const entity = await dao.find(id);
+        return [entity, body];
+    }
+}
+
+export function buildCallbackInsert<T>(dao: Dao<T>, baseUrl: string, successMessage: InsertSuccess<T>): AuthorizedCallback<T> {
+    return (res, body, _) => {
+        dao.insert(body).then((insertedId) => {
+            console.log(successMessage(body, insertedId));
             res.setHeader('Location', `${baseUrl}/${insertedId}`).status(201).send();
         }).catch((err) => {
             console.warn(err);
             res.status(500).send();
         });
-    });
+    }
 }
 
-export function readAllRoute<T, R = T>(router: Router, em: EntityManager<T, ObjectID>, filter?: Selector, projection?: Selector): any {
-    router.get("/", (req, res) => {
-        em.findMany<R>(filter, projection).then((entities) => {
-            res.status(200).json(entities).send();
+export function buildCallbackInsertWithAccount<T>(dao: Dao<T>, baseUrl: string, successMessage: InsertSuccess<T>): AuthorizedCallback<T> {
+    return (res, body, account) => {
+        dao.insert(body, account.id).then((insertedId) => {
+            console.log(successMessage(body, insertedId));
+            res.setHeader('Location', `${baseUrl}/${insertedId}`).status(201).send();
         }).catch((err) => {
             console.warn(err);
             res.status(500).send();
         });
-    });
+    }
 }
 
-export function readRoute<T, R = T>(router: Router, em: EntityManager<T, ObjectID>, projection?: Selector): any {
-    router.get("/:id", (req, res) => {
-        const id = req.params.id as string;
-        em.findOne<R>({_id: new ObjectID(id)}, projection).then((entity) => {
+export function buildCallbackRead<T>(dao: ReadDao<T>): AuthorizedCallback<string> {
+    return (res,  id, _) => {
+        dao.find(id).then((entity) => {
             res.status(200).json(entity).send();
         }).catch((err) => {
             console.warn(err);
             res.status(500).send();
         });
-    });
-}
-
-export function updateRoute<T>(router: Router, em: EntityManager<T, ObjectID>, map: EntityMapper<T>, successMessage: UpdateSuccess<T>): any {
-    router.put("/:id", (req, res) => {
-        const id = req.params.id as string;
-        const entity = map(req.body)
-        const entityCopy = Object.assign({}, entity);
-        em.updateOne({_id: new ObjectID(id)}, entity).then(() => {
-            console.log(successMessage(id, entityCopy, entity));
-            res.status(204).send();
-        }).catch((err) => {
-            console.warn(err);
-            res.status(500).send();
-        });
-    });
-}
-
-export function deleteRoute<T>(router: Router, em: EntityManager<T, ObjectID>, successMessage: DeleteSuccess): any {
-    router.delete("/:id", (req, res) => {
-        const id = req.params.id as string;
-        em.deleteOne({_id: new ObjectID(id)}).then(() => {
-            console.log(successMessage(id));
-            res.status(204).send();
-        }).catch((err) => {
-            console.warn(err);
-            res.status(500).send();
-        });
-    });
-}
-
-export function extractAccountId<T>(em: EntityManager<WithAccount<T>, ObjectID>): (req: Request) => Promise<string | undefined> {
-    return async (req) => {
-        const id = req.params.id as string;
-        const oldEntity = await em.findOne({_id: new ObjectID(id)});
-        const accountId = oldEntity?.account as ObjectID;
-        return accountId?.toHexString();
     }
 }
 
-export function attachAccountId<T>(res: Response, entity: T): WithAccount<T> {
-    const account = res.locals.account as WithID<Account, ObjectID>;
-    return Object.assign({
-        account: account._id
-    }, entity);
+export function buildCallbackReadLoaded<T>(): AuthorizedCallback<T> {
+    return (res, entity, _) => {
+        res.status(200).json(entity).send();
+    }
 }
 
-export function insertGuardedRoute<T>(router: Router, em: EntityManager<WithAccount<T>, ObjectID>, entityMapper: EntityMapper<T>, baseUrl: string, successMessage: InsertSuccess<T>) {
-    router.post("/", requireLoggedIn(), (req, res) => {
-        const entity = attachAccountId<T>(res, entityMapper(req.body));
-        em.insertOne(entity).then((insertedId) => {
-            console.log(successMessage(entity, insertedId.toHexString()));
-            res.setHeader('Location', `${baseUrl}/${insertedId}`).status(201).send();
+export function buildCallbackReadAll<T>(dao: ReadDao<T>): AuthorizedCallback<void> {
+    return (res, _id, _acc) => {
+        dao.findAll().then((entity) => {
+            res.status(200).json(entity).send();
         }).catch((err) => {
             console.warn(err);
             res.status(500).send();
         });
-    });
+    }
 }
 
-export function updateGuardedRoute<T>(router: Router, roles: string[], em: EntityManager<WithAccount<T>, ObjectID>, entityMapper: EntityMapper<T>, successMessage: UpdateSuccess<T>): any {
-    router.put("/:id", requireRolesOrId(roles, extractAccountId(em)), (req, res) => {
-        const id = req.params.id as string;
-        const newEntity = attachAccountId(res, entityMapper(req.body));
-        em.updateOne({_id: new ObjectID(id)}, newEntity).then(() => {
-            console.log(successMessage(id, undefined, newEntity));
+export function buildCallbackReadManyByAccount<T>(dao: ReadDao<T>): AuthorizedCallback<void> {
+    return (res, _id, account) => {
+        dao.findAll(account?.id).then((entity) => {
+            res.status(200).json(entity).send();
+        }).catch((err) => {
+            console.warn(err);
+            res.status(500).send();
+        });
+    }
+}
+
+export function buildCallbackUpdate<T>(dao: Dao<T>, successMessage: UpdateSuccess<T>): AuthorizedCallback<[string, T, T]> {
+    return (res, [eid, body, entity], _) => {
+        dao.update(eid, entity).then(() => {
+            console.log(successMessage(eid, entity, body));
             res.status(204).send();
         }).catch((err) => {
             console.warn(err);
-            res.status(500).send(err);
+            res.status(500).send();
         });
-    });
+    }
 }
 
-export function deleteGuardedRoute<T>(router: Router, roles: string[], em: EntityManager<WithAccount<T>, ObjectID>, successMessage: DeleteSuccess) {
-    router.put("/:id", requireRolesOrId(roles, extractAccountId(em)), (req, res) => {
-        const id = req.params.id as string;
-        em.deleteOne({_id: new ObjectID(id)}).then(() => {
-            console.log(successMessage(id));
+export function buildCallbackDelete<T>(dao: Dao<T>, successMessage: DeleteSuccess): AuthorizedCallback<string> {
+    return (res, eid, _) => {
+        dao.delete(eid).then(() => {
+            console.log(successMessage(eid));
             res.status(204).send();
         }).catch((err) => {
             console.warn(err);
-            res.status(500).send(err);
+            res.status(500).send();
         });
-    });
+    }
 }

@@ -1,10 +1,11 @@
 import * as bcrypt from 'bcrypt';
 import * as jwt from 'jsonwebtoken'
-import {Account} from "../model/account";
-import {ObjectID} from "bson";
 import {JwtPayload} from "jsonwebtoken";
-import {WithID} from "../persistance/entity-manager";
+import {Account} from "../model/account";
+import {AccountEntity} from "../persistance/entities/account-entity";
+import {WithID} from "../model/models";
 
+const radix = 16;
 const saltRounds = 12;
 const algorithm = 'HS256';
 const issuer = 'stvgebenstorf.ch';
@@ -17,15 +18,15 @@ export async function verifyPassword(password: string, passwordHash?: string): P
     return await bcrypt.compare(password, passwordHash);
 }
 
-export async function signJwt(account: Account & {_id: ObjectID, emailVerified: boolean}, secret: string): Promise<string> {
+export async function signJwt(entity: AccountEntity, secret: string): Promise<string> {
     return new Promise((resolve, reject) => {
         jwt.sign({
-            username: account.username,
-            email: account.email,
-            roles: account.roles
+            username: entity.username,
+            email: entity.email,
+            roles: entity.roles
         }, secret, {
             algorithm,
-            subject: account._id.toHexString(),
+            subject: entity.id.toString(radix),
             expiresIn: '1h',
             issuer
         }, (err, token) => {
@@ -38,7 +39,7 @@ export async function signJwt(account: Account & {_id: ObjectID, emailVerified: 
     });
 }
 
-export async function verifyJwt(token: string, secret: string): Promise<WithID<Account, ObjectID>> {
+export async function verifyJwt(token: string, secret: string): Promise<WithID<Account>> {
     return new Promise((resolve, reject) => {
         jwt.verify(token, secret, {
             algorithms: [algorithm],
@@ -46,7 +47,7 @@ export async function verifyJwt(token: string, secret: string): Promise<WithID<A
         }, (err, decoded: JwtPayload) => {
             if (!err) {
                 resolve({
-                    _id: new ObjectID(decoded.sub as string),
+                    id: Number.parseInt(decoded.sub, radix),
                     username: decoded.username,
                     email: decoded.email,
                     roles: decoded.roles

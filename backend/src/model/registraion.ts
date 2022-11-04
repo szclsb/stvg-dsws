@@ -1,10 +1,7 @@
-import {Category, Discipline} from "./discipline";
-import {ObjectID} from "bson";
-
 export class Registration {
-    discipline: ObjectID | Discipline;
-    category: ObjectID | Category;
-    member: string | string[];
+    discipline: number;
+    category: number;
+    member: number[];
 }
 
 export function mapper(body: any): Registration {
