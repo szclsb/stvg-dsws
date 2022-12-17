@@ -1,0 +1,36 @@
+// Retrive all
+GET http://localhost:8080/api/v1/discipline
+Accept: application/json
+
+> {%
+    client.test("Request executed successfully", () => {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+%}
+
+###
+// Retrive single
+GET http://localhost:8080/api/v1/discipline/1
+Accept: application/json
+
+> {%
+    client.test("Request executed successfully", () => {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+%}
+
+###
+// insret
+POST http://localhost:8080/api/v1/discipline
+Accept: application/json
+
+{
+    "name": "test discipline"
+}
+
+> {%
+    client.test("Request executed successfully", () => {
+        client.assert(response.status === 201, "Response status is not 200");
+
+    });
+%}

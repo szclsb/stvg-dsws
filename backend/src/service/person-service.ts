@@ -22,7 +22,7 @@ export class PersonService {
         this.dao = dao;
     }
 
-    public async create(owner: WithID<Account>, person: Person): Promise<number> {
+    public async create(owner: WithID<Account>, person: Person): Promise<string> {
         return await this.dao.insert({
             accountId: owner.id,
             firstName: person.firstName,
@@ -42,7 +42,7 @@ export class PersonService {
         return entities.map(entity => mapper(entity));
     }
 
-    public async findById(id: number, preCheck?: (accountId?: number) => any): Promise<WithID<Person>> {
+    public async findById(id: string, preCheck?: (accountId?: string) => any): Promise<WithID<Person>> {
         const entity = await this.dao.find(id);
         if (entity == null) {
             throw new HttpError(HttpError.NOT_FOUND, `No person found with id ${id}`);
@@ -51,7 +51,7 @@ export class PersonService {
         return mapper(entity);
     }
 
-    public async findAndUpdate(id: number, person: Person, preCheck?: (accountId?: number) => any): Promise<any> {
+    public async findAndUpdate(id: string, person: Person, preCheck?: (accountId?: string) => any): Promise<any> {
         const entity = await this.dao.find(id);
         if (entity == null) {
             throw new HttpError(HttpError.NOT_FOUND, `No person found with id ${id}`);
@@ -65,7 +65,7 @@ export class PersonService {
         });
     }
 
-    public async findAndDelete(id: number, preCheck?: (accountId?: number) => any): Promise<any> {
+    public async findAndDelete(id: string, preCheck?: (accountId?: string) => any): Promise<any> {
         const entity = await this.dao.find(id);
         if (entity == null) {
             throw new HttpError(HttpError.NOT_FOUND, `No person found with id ${id}`);

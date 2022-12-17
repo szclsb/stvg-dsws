@@ -1,21 +1,30 @@
 import {MongoDao} from "../mongo-dao";
-import {WithID} from "../../../dao/dao";
 import {DisciplineDao} from "../../../dao/discipline-dao";
 import {Discipline} from "../../../../model/discipline";
-import {Db, Document, WithId as WithDocId} from "mongodb";
+import {WithID} from "../../../../model/models";
+import {Db} from "mongodb";
+import {DisciplineEntity} from "../../../entities/discipline-entity";
+import {ObjectID} from "bson";
 
-export class MongoDisciplineDaoDao extends MongoDao<Discipline> implements DisciplineDao {
+export class MongoDisciplineDaoDao extends MongoDao<DisciplineEntity> implements DisciplineDao {
     constructor(db: Db) {
         super(db.collection("disciplines"), doc => {
-            const model: WithID<Discipline> = {
+            return  {
                 id: doc._id.toHexString(),
                 name: doc.name,
                 categories: doc.categories,
                 minMembers: doc.minMembers,
                 maxMembers: doc.maxMembers,
             }
-            return model;
-        }, t => t as Document);
+        }, entity => {
+            return {
+                _id: ObjectID.createFromHexString(entity.id),
+                name: entity.name,
+                categories: entity.categories,
+                minMembers: entity.minMembers,
+                maxMembers: entity.maxMembers,
+            }
+        });
     }
 
     findByName(name: string): Promise<WithID<Discipline> | null> {

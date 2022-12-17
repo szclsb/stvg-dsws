@@ -1,5 +1,5 @@
-import {WithID} from "../persistance/dao/dao";
 import {Account} from "../model/account";
+import {WithID} from "../model/models";
 import {HttpError} from "../http-error";
 
 

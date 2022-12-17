@@ -1,40 +1,65 @@
-import {WithID} from "../../../dao/dao";
-import {MongoDatasource} from "../mongo-datasource";
-import {MongoAccountRelatedDao} from "../mongo-dao-account-related";
-import {Person} from "../../../../model/person";
-import {Registration} from "../../../../model/registraion";
 import {RegistrationDao} from "../../../dao/registration-dao";
-import {Discipline} from "../../../../model/discipline";
 import {ObjectID} from "bson";
 import {Db, Document, WithId as WithDocId} from "mongodb";
+import {MongoDao} from "../mongo-dao";
+import {RegistrationEntity} from "../../../entities/registraion-entity";
+import {DisciplineEntity} from "../../../entities/discipline-entity";
+import {PersonEntity} from "../../../entities/person-entity";
 
-export class MongoRegistrationDao extends MongoAccountRelatedDao<Registration> implements RegistrationDao {
+export class MongoRegistrationDao extends MongoDao<RegistrationEntity> implements RegistrationDao {
     constructor(db: Db) {
-        super(db.collection("disciplines"), doc => {
-            const model: WithID<Registration> = {
+        super(db.collection("registrations"), doc => {
+            return {
                 id: doc._id.toHexString(),
-                discipline: doc.discipline?.toHexString(),
-                category: doc.category?.toHexString(),
-                member: doc.member.map((oid: ObjectID) => oid.toHexString())
+                accountId: doc.accountId.toHexString(),
+                disciplineId: doc.disciplineId.toHexString(),
+                categoryId: doc.categoryId.toHexString(),
+                memberIds: doc.memberIds.map((oid: ObjectID) => oid.toHexString())
             }
-            return model;
         }, entity => {
             const doc: Document = {
-                discipline: new ObjectID(entity.discipline),
-                category: new ObjectID(entity.category),
-                member: entity.member.map(memberId => new ObjectID(memberId))
+                _id: ObjectID.createFromHexString(entity.id),
+                accountId: ObjectID.createFromHexString(entity.accountId),
+                disciplineId: ObjectID.createFromHexString(entity.disciplineId),
+                categoryId: ObjectID.createFromHexString(entity.categoryId),
+                memberIds: entity.memberIds.map(memberId => ObjectID.createFromHexString(memberId))
             }
             return doc;
         });
     }
 
-    findDisciplinesByParticipant(participantId: string): Promise<WithID<Discipline[]>> {
-        // todo
+    async findDisciplinesByParticipant(participantId: string): Promise<DisciplineEntity[]> {
+        // const docs = await this.collection.aggregate([
+        //     {
+        //         $match: {
+        //             memberIds: {$all: parseId(participantId)}
+        //         }
+        //
+        //     }
+        // ]).toArray() as WithDocId<Document>[];
         return Promise.resolve(undefined);
     }
 
-    findParticipantsByDiscipline(disciplineId: string, categoryId?: string): Promise<WithID<Person[]>> {
-        // todo
+    async findParticipantsByDiscipline(disciplineId: string, categoryId?: string): Promise<PersonEntity[]> {
+        // const docs = await this.collection.aggregate([
+        //     {
+        //         $match: {
+        //             disciplineId: parseId(disciplineId)
+        //             categoryId: parseId(categoryId)
+        //         }
+        //     }
+        // ]).toArray() as WithDocId<Document>[];
         return Promise.resolve(undefined);
+    }
+
+    async findAllByAccountId(accountId: string): Promise<RegistrationEntity[]> {
+        const docs = await this.collection.aggregate([
+            {
+                $match: {
+                    accountId: ObjectID.createFromHexString(accountId)
+                }
+            }
+        ]).toArray() as WithDocId<Document>[];
+        return docs.map(doc => this.docMapper(doc));
     }
 }

@@ -5,8 +5,8 @@ import * as json from '../dsws-config.json';
 import {init as initRoutes} from "./routes";
 import {loadConfig} from "./utils/config-utils";
 import {MongoDatasource} from "./persistance/impl/mongodb/mongo-datasource";
-import {ObjectID} from "bson";
 import {Datasource} from "./persistance/datasource";
+import {ObjectID} from "bson";
 
 const app = express();
 const config = loadConfig(json);

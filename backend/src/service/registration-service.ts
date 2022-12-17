@@ -10,7 +10,7 @@ function mapper(entity: RegistrationEntity): WithID<Registration> {
         id: entity.id,
         discipline: entity.disciplineId,
         category: entity.categoryId,
-        member: entity.memberId
+        member: entity.memberIds
     }
 }
 
@@ -21,12 +21,12 @@ export class RegistrationService {
         this.dao = dao;
     }
 
-    public async create(owner: WithID<Account>, registration: Registration): Promise<number> {
+    public async create(owner: WithID<Account>, registration: Registration): Promise<string> {
         return await this.dao.insert({
             accountId: owner.id,
             disciplineId: registration.discipline,
             categoryId: registration.category,
-            memberId: registration.member
+            memberIds: registration.member
         });
     }
 
@@ -40,7 +40,7 @@ export class RegistrationService {
         return entities.map(entity => mapper(entity));
     }
 
-    public async findById(id: number, preCheck?: (accountId?: number) => any): Promise<WithID<Registration> | null> {
+    public async findById(id: string, preCheck?: (accountId?: string) => any): Promise<WithID<Registration> | null> {
         const entity = await this.dao.find(id);
         if (entity == null) {
             throw new HttpError(HttpError.NOT_FOUND ,`No registration found with id ${id}`);
@@ -49,7 +49,7 @@ export class RegistrationService {
         return mapper(entity);
     }
 
-    public async findAndUpdate(id: number, registration: Registration, preCheck?: (accountId?: number) => any) {
+    public async findAndUpdate(id: string, registration: Registration, preCheck?: (accountId?: string) => any) {
         const entity = await this.dao.find(id);
         if (entity == null) {
             throw new HttpError(HttpError.NOT_FOUND, `No registration found with id ${id}`);
@@ -58,11 +58,11 @@ export class RegistrationService {
         await this.dao.update(id, {
             disciplineId: registration.discipline,
             categoryId: registration.category,
-            memberId: registration.member
+            memberIds: registration.member
         });
     }
 
-    public async findAndDelete(id: number, preCheck?: (accountId?: number) => any) {
+    public async findAndDelete(id: string, preCheck?: (accountId?: string) => any) {
         const entity = await this.dao.find(id);
         if (entity == null) {
             throw new HttpError(HttpError.NOT_FOUND, `No registration found with id ${id}`);

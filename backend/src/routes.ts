@@ -7,22 +7,27 @@ import {init as initRegistration} from './routes/registration-route'
 import express, {Application} from "express";
 import {Config} from "./model/config";
 import {Datasource} from "./persistance/datasource";
-import {AccountDao} from "./persistance/dao/account-dao";
-import {DisciplineDao} from "./persistance/dao/discipline-dao";
-import {PersonDao} from "./persistance/dao/person-dao";
-import {RegistrationDao} from "./persistance/dao/registration-dao";
+import {AccountService} from "./service/account-service";
+import {DisciplineService} from "./service/discipline-service";
+import {PersonService} from "./service/person-service";
+import {RegistrationService} from "./service/registration-service";
+import {AuthService} from "./service/auth-service";
 
 export function init(config: Config, app: Application, datasource: Datasource): Application {
-    const accountManager: AccountDao = datasource.createAccountDao();
-    const disciplineManager: DisciplineDao = datasource.createDisciplineDao();
-    const personManager: PersonDao = datasource.createPersonDao();
-    const registrationManager: RegistrationDao = datasource.createRegistrationDao();
+    const accountDao = datasource.createAccountDao();
 
+    const authService: AuthService = new AuthService(config.secret, accountDao);
+    const accountService: AccountService = new AccountService(accountDao);
+    const disciplineService: DisciplineService = new DisciplineService(datasource.createDisciplineDao());
+    const personService: PersonService = new PersonService(datasource.createPersonDao());
+    const registrationService: RegistrationService = new RegistrationService(datasource.createRegistrationDao());
+
+    // extract loggedIn user from auth token
     app.use(async (req, res, next) => {
         const auth = req.header('Authorization');
         if (auth && auth.startsWith('Bearer ')) {
             try {
-                res.locals.account =
+                res.locals.account = await authService.verify(auth.substring(7));
             } catch (e) {
                 console.warn(e)
             }
@@ -30,10 +35,11 @@ export function init(config: Config, app: Application, datasource: Datasource): 
         next();
     });
 
-    app.use('/api/v1/auth', initAuth(config, express.Router(), accountManager));
-    app.use('/api/v1/account', initAccount(config, express.Router(), accountManager));
-    app.use('/api/v1/discipline', initDiscipline(config, express.Router(), disciplineManager));
-    app.use('/api/v1/persons', initPerson(config, express.Router(), personManager));
-    app.use('/api/v1/registration', initRegistration(config, express.Router(), registrationManager));
+    app.use('/api/v1/auth', initAuth(config, express.Router(), accountService, authService));
+    app.use('/api/v1/accounts', initAccount(config, express.Router(), accountService));
+    app.use('/api/v1/disciplines', initDiscipline(config, express.Router(), disciplineService));
+    app.use('/api/v1/persons', initPerson(config, express.Router(), personService));
+    app.use('/api/v1/registrations', initRegistration(config, express.Router(), registrationService));
+
     return app
 }

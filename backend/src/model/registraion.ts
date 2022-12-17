@@ -1,7 +1,7 @@
 export class Registration {
-    discipline: number;
-    category: number;
-    member: number[];
+    discipline: string;
+    category: string;
+    member: string[];
 }
 
 export function mapper(body: any): Registration {

@@ -15,7 +15,7 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 export async function verifyPassword(password: string, passwordHash?: string): Promise<boolean> {
-    return await bcrypt.compare(password, passwordHash);
+    return !!passwordHash && await bcrypt.compare(password, passwordHash);
 }
 
 export async function signJwt(entity: AccountEntity, secret: string): Promise<string> {
@@ -26,7 +26,7 @@ export async function signJwt(entity: AccountEntity, secret: string): Promise<st
             roles: entity.roles
         }, secret, {
             algorithm,
-            subject: entity.id.toString(radix),
+            subject: entity.id,
             expiresIn: '1h',
             issuer
         }, (err, token) => {
@@ -47,7 +47,7 @@ export async function verifyJwt(token: string, secret: string): Promise<WithID<A
         }, (err, decoded: JwtPayload) => {
             if (!err) {
                 resolve({
-                    id: Number.parseInt(decoded.sub, radix),
+                    id: decoded.sub,
                     username: decoded.username,
                     email: decoded.email,
                     roles: decoded.roles

@@ -1,53 +1,42 @@
 import {Dao} from "../../dao/dao";
 import {ObjectID} from "bson";
-import {Collection, Db, Document, WithId as WithDocId} from "mongodb";
-import {WithID} from "../../../model/models";
+import {Collection, Document, WithId as WithDocId} from "mongodb";
+import {Entity} from "../../entities/entity";
+export type DocumentMapper<E extends Entity> = (doc: WithDocId<Document>) => E
+export type ModelMapper<E extends Entity> = (entity: E) => Document
 
-export type DocumentMapper<T> = (doc: WithDocId<Document>) => WithID<T>
-export type ModelMapper<T> = (t: T) => Document
-
-export class MongoDao<T> implements Dao<T> {
+export class MongoDao<E extends Entity> implements Dao<E> {
     protected collection: Collection;
-    protected readonly docMapper: DocumentMapper<T>;
-    protected readonly modelMapper: ModelMapper<T>;
+    protected readonly docMapper: DocumentMapper<E>;
+    protected readonly modelMapper: ModelMapper<E>;
 
-    public static accountFilter(accountId: number): Document {
+    public static accountFilter(accountId: string): Document {
         return  {
             $filter: {
-                accountId: MongoDao.parseId(accountId)
+                accountId: ObjectID.createFromHexString(accountId)
             }
         }
     }
 
-    public static idFilter(id: number): Document {
+    public static idFilter(id: string): Document {
         return {
-            _id: MongoDao.parseId(id)
+            _id: ObjectID.createFromHexString(id)
         }
     }
 
-    public static parseId(id: number): ObjectID {
-        const buf = Buffer.alloc(4);
-        buf.writeUInt32LE(id);
-        return new ObjectID(buf);
-    }
-
-    public static objectIdNum(objectId: ObjectID): number {
-        return objectId.id.readUInt32LE(0);
-    }
-
-    constructor(collection: Collection, docMapper: DocumentMapper<T>, modelMapper: ModelMapper<T>) {
+    constructor(collection: Collection, docMapper: DocumentMapper<E>, modelMapper: ModelMapper<E>) {
         this.collection = collection;
         this.docMapper = docMapper;
         this.modelMapper = modelMapper;
     }
 
-    async insert(entity: T, accountId?: string): Promise<number> {
+    async insert(entity: E, accountId?: string): Promise<string> {
         const doc = this.modelMapper(entity);
         if(!!accountId) {
             doc.account = new ObjectID(accountId);
         }
         const result = await this.collection.insertOne(doc);
-        return MongoDao.objectIdNum(result.insertedId);
+        return result.insertedId.toHexString();
     }
 
     // async insertMany(entities: T[], accountId?: string): Promise<string[]> {
@@ -56,12 +45,12 @@ export class MongoDao<T> implements Dao<T> {
     //     return Object.values(result.insertedIds).map(oid => oid.toHexString());
     // }
 
-    async find(id: number): Promise<WithID<T> | null> {
+    async find(id: string): Promise<E | null> {
         const doc = await this.collection.findOne(MongoDao.idFilter(id)) as WithDocId<Document>;
-        return this.docMapper(doc);
+        return !doc ? null : this.docMapper(doc);
     }
 
-    async findAll(accountId?: number): Promise<WithID<T>[]> {
+    async findAll(accountId?: string): Promise<E[]> {
         const pipeline: Document[] = [];
         if (!!accountId) {
             pipeline.push(MongoDao.accountFilter(accountId));
@@ -69,12 +58,12 @@ export class MongoDao<T> implements Dao<T> {
         return docs.map(doc => this.docMapper(doc));
     }
 
-    async update(id: number, entity: T): Promise<any> {
+    async update(id: string, entity: E): Promise<any> {
         const doc = this.modelMapper(entity)
         await this.collection.findOneAndUpdate(MongoDao.idFilter(id), {$set: doc});
     }
 
-    async delete(id: number): Promise<any> {
+    async delete(id: string): Promise<any> {
         return await this.collection.findOneAndDelete(MongoDao.idFilter(id));
     }
 }

@@ -32,7 +32,7 @@ export class DisciplineService {
         this.dao = dao;
     }
 
-    public async create(discipline: Discipline): Promise<number> {
+    public async create(discipline: Discipline): Promise<string> {
         return await this.dao.insert(discipline);
     }
 
@@ -41,7 +41,7 @@ export class DisciplineService {
         return entities.map(entity => disciplineMapper(entity));
     }
 
-    public async findById(id: number): Promise<WithID<Discipline>> {
+    public async findById(id: string): Promise<WithID<Discipline>> {
         const entity = await this.dao.find(id);
         if (entity == null) {
             throw new HttpError(HttpError.NOT_FOUND ,`No discipline found with id ${id}`);
@@ -61,7 +61,7 @@ export class DisciplineService {
     //     return;
     // }
 
-    public async delete(id: number) {
+    public async delete(id: string) {
         return await this.dao.delete(id);
     }
 }

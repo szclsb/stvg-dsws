@@ -6,7 +6,7 @@ import {AccountEntity} from "../../../entities/account-entity";
 export class MongoAccountDao implements AccountDao {
     private static modelMapper(doc: WithDocId<Document>): AccountEntity {
         return {
-            id: MongoDao.objectIdNum(doc._id),
+            id: doc._id.toHexString(),
             username: doc.username,
             email: doc.email,
             address: doc.address,
@@ -22,7 +22,7 @@ export class MongoAccountDao implements AccountDao {
         this.collection = db.collection('accounts');
     }
 
-    async insert(entity: AccountEntity): Promise<number> {
+    async insert(entity: AccountEntity): Promise<string> {
         const doc: Document = {
             username: entity.username,
             email: entity.email,
@@ -30,14 +30,7 @@ export class MongoAccountDao implements AccountDao {
             address: entity.address,
         }
         const result = await this.collection.insertOne(doc);
-        return MongoDao.objectIdNum(result.insertedId);
-    }
-
-    async find(id: number): Promise<AccountEntity | null> {
-        const doc = await this.collection.findOne(MongoDao.idFilter(id)) as WithDocId<Document> | null;
-        if (doc) {
-            return MongoAccountDao.modelMapper(doc);
-        }
+        return result.insertedId.toHexString();
     }
 
     async findAll(): Promise<AccountEntity[]> {
@@ -45,21 +38,22 @@ export class MongoAccountDao implements AccountDao {
         return docs.map(doc => MongoAccountDao.modelMapper(doc));
     }
 
+    async find(id: string): Promise<AccountEntity | null> {
+        const doc = await this.collection.findOne(MongoDao.idFilter(id)) as WithDocId<Document> | null;
+        return !doc ? null :  MongoAccountDao.modelMapper(doc);
+    }
+
     async findByUsername(username: string): Promise<AccountEntity | null> {
         const doc = await this.collection.findOne({username}) as WithDocId<Document> | null;
-        if (doc) {
-            return MongoAccountDao.modelMapper(doc);
-        }
+        return !doc ? null : MongoAccountDao.modelMapper(doc);
     }
 
     async findByEmail(email: string): Promise<AccountEntity | null> {
         const doc = await this.collection.findOne({email}) as WithDocId<Document> | null;
-        if (doc) {
-            return MongoAccountDao.modelMapper(doc);
-        }
+        return !doc ? null : MongoAccountDao.modelMapper(doc);
     }
 
-    async update(id: number, account: AccountEntity): Promise<any> {
+    async update(id: string, account: AccountEntity): Promise<any> {
         const doc: Document = {
             username: account.username,
             email: account.email,
@@ -71,7 +65,7 @@ export class MongoAccountDao implements AccountDao {
         ]);
     }
 
-    async delete(id: number): Promise<any> {
+    async delete(id: string): Promise<any> {
         await this.collection.findOneAndDelete(MongoDao.idFilter(id));
     }
 }

@@ -1,9 +1,8 @@
+import {Entity} from "./entity";
 
-
-export class RegistrationEntity {
-    id?: number;
-    accountId?: number;
-    disciplineId: number;
-    categoryId: number;
-    memberId: number[];
+export interface RegistrationEntity extends Entity{
+    accountId?: string;
+    disciplineId: string;
+    categoryId: string;
+    memberIds: string[];
 }

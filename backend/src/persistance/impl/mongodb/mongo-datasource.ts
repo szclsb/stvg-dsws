@@ -10,8 +10,9 @@ import {MongoPersonDao} from "./dao/mongo-person-dao";
 import {MongoRegistrationDao} from "./dao/mongo-registration-dao";
 
 export class MongoDatasource implements Datasource {
-    private client: MongoClient;
-    private dbName: string;
+
+    private client?: MongoClient;
+    private dbName?: string;
 
     async connect(config: Config): Promise<any> {
         this.client = await MongoClient.connect(`mongodb+srv://${config.dbUser}:${config.dbPassword}@${config.dbConnection}`);
