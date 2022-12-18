@@ -13,7 +13,7 @@ export class AuthService {
         this.dao = dao;
     }
 
-    public async register(registration: Account & {password: string}): Promise<any> {
+    public async register(registration: Account & {password: string}): Promise<string> {
         const hash = await hashPassword(registration.password);
         return await this.dao.insert({
             username: registration.username,

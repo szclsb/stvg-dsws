@@ -2,6 +2,7 @@ import {MongoDao} from "../mongo-dao";
 import {AccountDao} from "../../../dao/account-dao";
 import {Collection, Db, Document, WithId as WithDocId} from "mongodb";
 import {AccountEntity} from "../../../entities/account-entity";
+import e from "express";
 
 export class MongoAccountDao implements AccountDao {
     private static modelMapper(doc: WithDocId<Document>): AccountEntity {
@@ -10,7 +11,7 @@ export class MongoAccountDao implements AccountDao {
             username: doc.username,
             email: doc.email,
             address: doc.address,
-            hash: doc.phash,
+            hash: doc.hash,
             roles: doc.roles,
             verified: doc.verified
         };
@@ -26,8 +27,10 @@ export class MongoAccountDao implements AccountDao {
         const doc: Document = {
             username: entity.username,
             email: entity.email,
-            roles: entity.roles,
             address: entity.address,
+            hash: entity.hash,
+            roles: entity.roles,
+            verified: entity.verified
         }
         const result = await this.collection.insertOne(doc);
         return result.insertedId.toHexString();
@@ -53,12 +56,14 @@ export class MongoAccountDao implements AccountDao {
         return !doc ? null : MongoAccountDao.modelMapper(doc);
     }
 
-    async update(id: string, account: AccountEntity): Promise<any> {
+    async update(id: string, entity: AccountEntity): Promise<any> {
         const doc: Document = {
-            username: account.username,
-            email: account.email,
-            roles: account.roles,
-            address: account.address,
+            username: entity.username,
+            email: entity.email,
+            address: entity.address,
+            hash: entity.hash,
+            roles: entity.roles,
+            verified: entity.verified
         }
         await this.collection.findOneAndUpdate(MongoDao.idFilter(id), [
             {$set: doc}
